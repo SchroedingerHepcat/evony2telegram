@@ -5,6 +5,7 @@ import requests
 import json
 import os.path
 import googletrans
+import markdown_strings as markdown
 
 msgFile = '/tmp/messages.log'
 
@@ -14,9 +15,16 @@ alliaceWarChannelId  = '-1001290191382'
 alliaceChatChannelId = '-1001326873478'
 otherChannelId       = '-1001432977274'
 translationString = ("{orig}"
-                     "\n\nTranslated:"
+                     "\n\n*Translated:*"
                      "\n{trans}"
                      "\n\nTranslated from {src} to {dest}"
+                    )
+
+translationString = ("*{player}*"
+                     "\n{orig}"
+                     "\n\n_Translation:_"
+                     "\n{trans}"
+                     "\nTranslated from _{src}_ to _{dest}_"
                     )
 
 
@@ -28,12 +36,15 @@ else:
 
 app = flask.Flask(__name__)
 
+def escape(text):
+    return markdown.esc_format(text)
+
 def translate(text):
     translator = googletrans.Translator()
     return translator.translate(text)
 
 def sendTelegramMessage(chatId, botId, message):
-    payload = {'chat_id': chatId, 'text': message}
+    payload = {'chat_id': chatId, 'text': message, 'parse_mode': 'MarkdownV2'}
     r = requests.post(telegramBotUrl.format(botId=botId), json=payload, timeout=5)
 
 def isolateNewMessages(messages):
@@ -97,25 +108,35 @@ def handleEvonyPost():
 
     for m in newMessages:
         if m.startswith('My Liege, the horns of war are sounding'):
-            sendTelegramMessage(alliaceWarChannelId, telegramBotId, m)
+            message = markdown.esc_format(m)
+            sendTelegramMessage(alliaceWarChannelId, telegramBotId, message)
         elif m.startswith('[369]'):
-            mText = ':'.join(m.split(':')[1:])
+            mSplit = m[5:].split(':')
+            mPlayer = mSplit[0]
+            mText = ':'.join(mSplit[1:])
             translated = translate(mText)
             if translated.src == translated.dest:
-                sendTelegramMessage(alliaceChatChannelId, telegramBotId, m)
+                message = (markdown.bold(mPlayer)
+                          + "\n"
+                          + markdown.esc_format(mText)
+                          )
+                sendTelegramMessage(alliaceChatChannelId, telegramBotId, message)
             else:
-                mWithTrans = translationString.format(orig=m
-                                                     ,trans=translated.text
-                                                     ,src=translated.src
-                                                     ,dest=translated.dest
-                                                     )
+                message = translationString.format(
+                                  player=markdown.esc_format(mPlayer)
+                                 ,orig=markdown.esc_format(mText)
+                                 ,trans=markdown.esc_format(translated.text)
+                                 ,src=markdown.esc_format(translated.src)
+                                 ,dest=markdown.esc_format(translated.dest)
+                                                  )
                 sendTelegramMessage(alliaceChatChannelId
                                    ,telegramBotId
-                                   ,mWithTrans
+                                   ,message
                                    )
                                                            
         else:
-            sendTelegramMessage(otherChannelId, telegramBotId, m)
+            message = markdown.esc_format(m)
+            sendTelegramMessage(otherChannelId, telegramBotId, message)
 
     return "Received"
 
