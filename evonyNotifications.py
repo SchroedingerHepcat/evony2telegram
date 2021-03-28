@@ -4,6 +4,7 @@ import flask
 import requests
 import json
 import os.path
+import googletrans
 
 msgFile = '/tmp/messages.log'
 
@@ -12,6 +13,12 @@ telegramBotId = '1680826928:AAHSJt-AWAMvUKvhyLLkq4KG8E-5Pd-DKAo'
 alliaceWarChannelId  = '-1001290191382'
 alliaceChatChannelId = '-1001326873478'
 otherChannelId       = '-1001432977274'
+translationString = ("{orig}"
+                     "\n\nTranslated:"
+                     "\n{trans}"
+                     "\n\nTranslated from {src} to {dest}"
+                    )
+
 
 if os.path.exists(msgFile):
     with open(msgFile) as f:
@@ -20,6 +27,10 @@ else:
     messageLog = []
 
 app = flask.Flask(__name__)
+
+def translate(text):
+    translator = googletrans.Translator()
+    return translator.translate(text)
 
 def sendTelegramMessage(chatId, botId, message):
     payload = {'chat_id': chatId, 'text': message}
@@ -61,10 +72,6 @@ def isolateNewMessages(messages):
 
     return newMessages
 
-@app.route('/')
-def hello_world():
-    return 'Hello, World!'
-
 @app.route('/evony', methods=['POST'])
 def handleEvonyPost():
     global messageLog
@@ -86,13 +93,27 @@ def handleEvonyPost():
     messageLog += newMessages
     with open(msgFile, 'a') as f:
         for m in newMessages:
-            f.write(m + "\n")
+            f.write(m + '\n')
 
     for m in newMessages:
-        if m.startswith("My Liege, the horns of war are sounding"):
+        if m.startswith('My Liege, the horns of war are sounding'):
             sendTelegramMessage(alliaceWarChannelId, telegramBotId, m)
-        elif m.startswith("[369]"):
-            sendTelegramMessage(alliaceChatChannelId, telegramBotId, m)
+        elif m.startswith('[369]'):
+            mText = ':'.join(m.split(':')[1:])
+            translated = translate(mText)
+            if translated.src == translated.dest:
+                sendTelegramMessage(alliaceChatChannelId, telegramBotId, m)
+            else:
+                mWithTrans = translationString.format(orig=m
+                                                     ,trans=translated.text
+                                                     ,src=translated.src
+                                                     ,dest=translated.dest
+                                                     )
+                sendTelegramMessage(alliaceChatChannelId
+                                   ,telegramBotId
+                                   ,mWithTrans
+                                   )
+                                                           
         else:
             sendTelegramMessage(otherChannelId, telegramBotId, m)
 
