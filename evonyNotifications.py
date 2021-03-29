@@ -14,12 +14,6 @@ telegramBotId = '1680826928:AAHSJt-AWAMvUKvhyLLkq4KG8E-5Pd-DKAo'
 alliaceWarChannelId  = '-1001290191382'
 alliaceChatChannelId = '-1001326873478'
 otherChannelId       = '-1001432977274'
-translationString = ("{orig}"
-                     "\n\n*Translated:*"
-                     "\n{trans}"
-                     "\n\nTranslated from {src} to {dest}"
-                    )
-
 translationString = ("*{player}*"
                      "\n{orig}"
                      "\n\n_Translation:_"
@@ -37,15 +31,23 @@ else:
 app = flask.Flask(__name__)
 
 def escape(text):
-    return markdown.esc_format(text)
+    badChars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '='
+               ,'|', '{', '}', '.', '!'
+               ]
+    escapedText = str(text)
+    for c in badChars:
+        escapedText = escapedText.replace(c, '\\' + c)
+    return escapedText
 
 def translate(text):
     translator = googletrans.Translator()
     return translator.translate(text)
 
 def sendTelegramMessage(chatId, botId, message):
+    print("Sending message:", message)
     payload = {'chat_id': chatId, 'text': message, 'parse_mode': 'MarkdownV2'}
     r = requests.post(telegramBotUrl.format(botId=botId), json=payload, timeout=5)
+    print("Response:", r.content)
 
 def isolateNewMessages(messages):
     global messageLog
@@ -108,7 +110,7 @@ def handleEvonyPost():
 
     for m in newMessages:
         if m.startswith('My Liege, the horns of war are sounding'):
-            message = markdown.esc_format(m)
+            message = escape(m)
             sendTelegramMessage(alliaceWarChannelId, telegramBotId, message)
         elif m.startswith('[369]'):
             mSplit = m[5:].split(':')
@@ -116,18 +118,18 @@ def handleEvonyPost():
             mText = ':'.join(mSplit[1:])
             translated = translate(mText)
             if translated.src == translated.dest:
-                message = (markdown.bold(mPlayer)
+                message = ("*" + escape(mPlayer) + "*"
                           + "\n"
-                          + markdown.esc_format(mText)
+                          + escape(mText)
                           )
                 sendTelegramMessage(alliaceChatChannelId, telegramBotId, message)
             else:
                 message = translationString.format(
-                                  player=markdown.esc_format(mPlayer)
-                                 ,orig=markdown.esc_format(mText)
-                                 ,trans=markdown.esc_format(translated.text)
-                                 ,src=markdown.esc_format(translated.src)
-                                 ,dest=markdown.esc_format(translated.dest)
+                                  player=escape(mPlayer)
+                                 ,orig=escape(mText)
+                                 ,trans=escape(translated.text)
+                                 ,src=escape(translated.src)
+                                 ,dest=escape(translated.dest)
                                                   )
                 sendTelegramMessage(alliaceChatChannelId
                                    ,telegramBotId
@@ -135,7 +137,7 @@ def handleEvonyPost():
                                    )
                                                            
         else:
-            message = markdown.esc_format(m)
+            message = escape(m)
             sendTelegramMessage(otherChannelId, telegramBotId, message)
 
     return "Received"
